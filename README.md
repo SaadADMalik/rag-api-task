@@ -252,6 +252,7 @@ Recommended:
 5. `FAISS_INDEX_PATH=data/faiss_index`
 6. `RATE_LIMIT_PER_MINUTE=10`
 7. `RATE_LIMIT_ONLY_ASK=true`
+8. `SCM_DO_BUILD_DURING_DEPLOYMENT=true`
 
 Optional tuning:
 
