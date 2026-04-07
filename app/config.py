@@ -26,8 +26,8 @@ class Settings(BaseSettings):
     # Groq Settings
     GROQ_API_KEY: str = Field(..., description="Groq API key")
     GROQ_MODEL: str = "llama-3.1-8b-instant"
-    GROQ_TEMPERATURE: float = 0.7
-    GROQ_MAX_TOKENS: int = 2000
+    GROQ_TEMPERATURE: float = 0.3
+    GROQ_MAX_TOKENS: int = 800
 
     # Embedding Settings
     EMBEDDING_MODEL_NAME: str = "sentence-transformers/all-MiniLM-L6-v2"
@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     # RAG Settings
     RAG_CHUNK_SIZE: int = 800
     RAG_CHUNK_OVERLAP: int = 150
-    RAG_TOP_K: int = 8
+    RAG_TOP_K: int = 6
     RAG_RELEVANCE_THRESHOLD: float = 0.25
     RAG_ENABLE_HYBRID_SEARCH: bool = False
 
@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     AGENT_MAX_ITERATIONS: int = 5
     AGENT_MEMORY_MAX_MESSAGES: int = 10
     AGENT_SESSION_TTL_MINUTES: int = 30
+    AGENT_USE_CHAT_HISTORY: bool = False
+    AGENT_CONTEXT_HISTORY_MESSAGES: int = 4
+    AGENT_CONTEXT_DOCS: int = 3
 
     # Feature Flags
     ENABLE_CALCULATOR_TOOL: bool = True

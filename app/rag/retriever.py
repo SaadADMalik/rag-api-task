@@ -60,7 +60,7 @@ class DocumentRetriever:
             documents = []
             seen_keys = set()
             doc_counts: Dict[str, int] = {}
-            per_document_cap = 3
+            per_document_cap = 2
 
             for doc, distance in raw_results:
                 score = 1.0 / (1.0 + float(distance))

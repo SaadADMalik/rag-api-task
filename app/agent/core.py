@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -26,6 +27,8 @@ class AIAgent:
     def __init__(self):
         """Initialize the AI agent."""
         self.llm = self._initialize_llm()
+        self._response_cache: Dict[str, Dict[str, Any]] = {}
+        self._cache_ttl_seconds = 1800
         logger.info("AIAgent initialized successfully")
 
     def _initialize_llm(self) -> ChatGroq:
@@ -75,8 +78,26 @@ class AIAgent:
         logger.info(f"Decision: {decision} (confidence: {confidence:.2f})")
 
         try:
+            cache_key = query.strip().lower()
+            cached = self._get_cached_response(cache_key)
+            if cached is not None:
+                result = {
+                    "answer": cached["answer"],
+                    "sources": cached["sources"],
+                    "decision": "rag_search",
+                    "session_id": actual_session_id,
+                    "confidence": confidence if settings.ENABLE_CONFIDENCE_SCORING else None,
+                }
+                session_manager.add_assistant_message(actual_session_id, result["answer"])
+                logger.info("Served response from in-memory cache")
+                return result
+
             history = session_manager.get_session_history(actual_session_id)
             chat_history = self._format_chat_history(history)[:-1]
+            if settings.AGENT_USE_CHAT_HISTORY:
+                chat_history = chat_history[-settings.AGENT_CONTEXT_HISTORY_MESSAGES:]
+            else:
+                chat_history = []
 
             sources: List[Dict[str, Any]] = []
 
@@ -97,7 +118,8 @@ class AIAgent:
                         "confidence": confidence if settings.ENABLE_CONFIDENCE_SCORING else None,
                     }
 
-                context = retriever.format_context(documents)
+                context_docs = documents[:settings.AGENT_CONTEXT_DOCS]
+                context = retriever.format_context(context_docs)
                 sources = retriever.get_sources_summary(documents)
 
                 messages = [
@@ -108,7 +130,8 @@ class AIAgent:
                             "If any requested detail is missing or partial, clearly say it is not fully available in context. "
                             "Do not infer missing policy values. "
                             "Cite source document names and page numbers when available. "
-                            "Keep the answer concise and structured with bullet points when helpful."
+                            "Keep the answer concise: max 8 bullet points and around 120-180 words "
+                            "unless the user explicitly asks for detailed output."
                         )
                     ),
                     *chat_history,
@@ -132,6 +155,7 @@ class AIAgent:
 
             # Add assistant response to session
             session_manager.add_assistant_message(actual_session_id, answer)
+            self._set_cached_response(cache_key, answer, sources)
 
             # Prepare response
             result = {
@@ -154,6 +178,26 @@ class AIAgent:
                 "session_id": actual_session_id,
                 "confidence": 0.0,
             }
+
+    def _get_cached_response(self, cache_key: str) -> Optional[Dict[str, Any]]:
+        """Return cached response if still valid."""
+        item = self._response_cache.get(cache_key)
+        if not item:
+            return None
+
+        if time.time() > item["expires_at"]:
+            self._response_cache.pop(cache_key, None)
+            return None
+
+        return {"answer": item["answer"], "sources": item["sources"]}
+
+    def _set_cached_response(self, cache_key: str, answer: str, sources: List[Dict[str, Any]]) -> None:
+        """Store response in cache with TTL."""
+        self._response_cache[cache_key] = {
+            "answer": answer,
+            "sources": sources,
+            "expires_at": time.time() + self._cache_ttl_seconds,
+        }
 
     def _format_chat_history(
         self,
