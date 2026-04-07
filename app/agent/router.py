@@ -63,33 +63,9 @@ class DecisionRouter:
         Returns:
             Tuple of (decision, confidence) where decision is "rag_search" or "direct_answer"
         """
-        query_lower = query.lower().strip()
-
-        # Rule 1: Check for greetings and general queries
-        if self._is_general_query(query_lower):
-            logger.info(f"Decision: direct_answer (general query detected)")
-            return "direct_answer", 0.95
-
-        # Rule 2: Check for policy-related keywords
-        policy_score = self._calculate_policy_score(query_lower)
-
-        if policy_score >= self.confidence_threshold:
-            logger.info(
-                f"Decision: rag_search (policy_score={policy_score:.2f}, "
-                f"threshold={self.confidence_threshold})"
-            )
-            return "rag_search", policy_score
-
-        # Rule 3: Check if it's a question about policies
-        if self._is_policy_question(query_lower):
-            logger.info(f"Decision: rag_search (policy question detected)")
-            return "rag_search", 0.75
-
-        # Default: Direct answer for general knowledge
-        logger.info(
-            f"Decision: direct_answer (no policy indicators, score={policy_score:.2f})"
-        )
-        return "direct_answer", 1.0 - policy_score
+        _ = query  # Query is intentionally unused when RAG is mandatory.
+        logger.info("Decision: rag_search (forced RAG mode enabled)")
+        return "rag_search", 1.0
 
     def _is_general_query(self, query: str) -> bool:
         """Check if query is a general greeting or small talk."""
