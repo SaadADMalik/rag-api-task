@@ -1,0 +1,39 @@
+# Git files
+.git
+.gitignore
+.github
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv
+venv/
+env/
+ENV/
+
+# Testing
+.pytest_cache
+htmlcov
+.coverage
+test_results.json
+tests/
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+
+# Documentation
+*.md
+plan.md
+
+# Release artifacts
+release.zip
