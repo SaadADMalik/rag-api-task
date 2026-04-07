@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from langchain_core.documents import Document
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 
 from app.config import settings
