@@ -37,10 +37,10 @@ class Settings(BaseSettings):
     FAISS_INDEX_PATH: str = "data/faiss_index"
 
     # RAG Settings
-    RAG_CHUNK_SIZE: int = 1000
-    RAG_CHUNK_OVERLAP: int = 200
-    RAG_TOP_K: int = 5
-    RAG_RELEVANCE_THRESHOLD: float = 0.2
+    RAG_CHUNK_SIZE: int = 800
+    RAG_CHUNK_OVERLAP: int = 150
+    RAG_TOP_K: int = 8
+    RAG_RELEVANCE_THRESHOLD: float = 0.25
     RAG_ENABLE_HYBRID_SEARCH: bool = False
 
     # Agent Settings

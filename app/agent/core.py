@@ -1,5 +1,4 @@
 import logging
-import re
 from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -83,15 +82,33 @@ class AIAgent:
 
             if decision == "rag_search":
                 documents = retriever.retrieve(query)
+
+                if not documents:
+                    answer = (
+                        "I could not find enough relevant policy information in the indexed documents "
+                        "to answer this question confidently. Please contact HR or IT for clarification."
+                    )
+                    session_manager.add_assistant_message(actual_session_id, answer)
+                    return {
+                        "answer": answer,
+                        "sources": [],
+                        "decision": decision,
+                        "session_id": actual_session_id,
+                        "confidence": confidence if settings.ENABLE_CONFIDENCE_SCORING else None,
+                    }
+
                 context = retriever.format_context(documents)
                 sources = retriever.get_sources_summary(documents)
 
                 messages = [
                     SystemMessage(
                         content=(
-                            "You are a corporate policy assistant. Answer only using the provided context. "
-                            "If context is insufficient, say you could not find enough policy detail and suggest contacting HR or IT. "
-                            "When using context, include document names in the response."
+                            "You are a strict corporate policy assistant. "
+                            "Answer only from the retrieved context and do not use outside knowledge. "
+                            "If any requested detail is missing or partial, clearly say it is not fully available in context. "
+                            "Do not infer missing policy values. "
+                            "Cite source document names and page numbers when available. "
+                            "Keep the answer concise and structured with bullet points when helpful."
                         )
                     ),
                     *chat_history,
@@ -103,25 +120,9 @@ class AIAgent:
                     ),
                 ]
             else:
-                calc = self._maybe_calculate(query)
-                if calc is not None:
-                    answer = calc
-                    session_manager.add_assistant_message(actual_session_id, answer)
-                    return {
-                        "answer": answer,
-                        "sources": [],
-                        "decision": decision,
-                        "session_id": actual_session_id,
-                        "confidence": confidence if settings.ENABLE_CONFIDENCE_SCORING else None,
-                    }
-
+                # Router is configured to force RAG mode.
                 messages = [
-                    SystemMessage(
-                        content=(
-                            "You are a professional internal assistant. "
-                            "Be concise, helpful, and factual."
-                        )
-                    ),
+                    SystemMessage(content="RAG mode is required for all queries."),
                     *chat_history,
                     HumanMessage(content=query),
                 ]
@@ -149,7 +150,7 @@ class AIAgent:
             return {
                 "answer": f"I apologize, but I encountered an error: {str(e)}",
                 "sources": [],
-                "decision": "direct_answer",
+                "decision": "rag_search",
                 "session_id": actual_session_id,
                 "confidence": 0.0,
             }
@@ -174,20 +175,6 @@ class AIAgent:
             elif msg["role"] == "assistant":
                 formatted.append(AIMessage(content=msg["content"]))
         return formatted
-
-    def _maybe_calculate(self, query: str) -> Optional[str]:
-        """Return calculator result for simple math expressions, otherwise None."""
-        normalized = query.strip().lower()
-        if not re.match(r"^[\d\s\+\-\*\/\(\)\.\%]+$", normalized):
-            return None
-
-        try:
-            result = eval(normalized, {"__builtins__": {}}, {})
-        except Exception:
-            return None
-
-        return str(result)
-
 
 # Global agent instance
 agent = AIAgent()

@@ -53,13 +53,16 @@ class DocumentRetriever:
                 logger.warning("No FAISS index found. Run document indexing first.")
                 return []
 
-            # FAISS returns (Document, distance). Convert distance to relevance score.
-            results = vectorstore.similarity_search_with_score(query, k=top_k)
+            # Over-fetch and then filter for better precision/diversity.
+            raw_results = vectorstore.similarity_search_with_score(query, k=max(top_k * 3, top_k))
 
-            # Process results
+            # Process, deduplicate, and limit per document.
             documents = []
-            for result in results:
-                doc, distance = result
+            seen_keys = set()
+            doc_counts: Dict[str, int] = {}
+            per_document_cap = 3
+
+            for doc, distance in raw_results:
                 score = 1.0 / (1.0 + float(distance))
 
                 # Filter by relevance threshold
@@ -70,14 +73,32 @@ class DocumentRetriever:
                     )
                     continue
 
+                doc_name = doc.metadata.get('document', 'unknown')
+                page = doc.metadata.get('page')
+                chunk_index = doc.metadata.get('chunk_index', 0)
+                dedup_key = (doc_name, page, chunk_index)
+
+                if dedup_key in seen_keys:
+                    continue
+
+                if doc_counts.get(doc_name, 0) >= per_document_cap:
+                    continue
+
+                seen_keys.add(dedup_key)
+                doc_counts[doc_name] = doc_counts.get(doc_name, 0) + 1
+
                 doc = {
                     'content': doc.page_content,
-                    'document': doc.metadata.get('document', 'unknown'),
+                    'document': doc_name,
                     'source_path': doc.metadata.get('source_path', ''),
-                    'chunk_index': doc.metadata.get('chunk_index', 0),
+                    'chunk_index': chunk_index,
+                    'page': page,
                     'relevance_score': float(score),
                 }
                 documents.append(doc)
+
+                if len(documents) >= top_k:
+                    break
 
             logger.info(
                 f"Retrieved {len(documents)} relevant documents "
@@ -122,8 +143,9 @@ class DocumentRetriever:
 
         context_parts = []
         for i, doc in enumerate(documents, 1):
+            page_label = f", Page {doc['page']}" if doc.get('page') else ""
             context_parts.append(
-                f"[Source {i}: {doc['document']}]\n"
+                f"[Source {i}: {doc['document']}{page_label}]\n"
                 f"{doc['content']}\n"
             )
 
@@ -143,25 +165,30 @@ class DocumentRetriever:
         if not documents:
             return []
 
-        # Group by document and get best score
-        doc_scores = {}
+        # Group by document and keep best score with best page/snippet.
+        doc_scores: Dict[str, Dict[str, Any]] = {}
         for doc in documents:
             doc_name = doc['document']
             score = doc['relevance_score']
 
-            if doc_name not in doc_scores or score > doc_scores[doc_name]:
-                doc_scores[doc_name] = score
+            if doc_name not in doc_scores or score > doc_scores[doc_name]['score']:
+                doc_scores[doc_name] = {
+                    'score': score,
+                    'page': doc.get('page'),
+                    'snippet': self._get_snippet(documents, doc_name),
+                }
 
         # Create source summaries
         sources = [
             {
                 'document': doc_name,
-                'relevance_score': round(score, 2),
-                'snippet': self._get_snippet(documents, doc_name)
+                'page': details.get('page'),
+                'relevance_score': round(details['score'], 2),
+                'snippet': details['snippet']
             }
-            for doc_name, score in sorted(
+            for doc_name, details in sorted(
                 doc_scores.items(),
-                key=lambda x: x[1],
+                key=lambda x: x[1]['score'],
                 reverse=True
             )
         ]
