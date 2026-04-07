@@ -82,7 +82,8 @@ High-level flow:
 
 ## 7) Generate or Refresh Documents
 
-If needed, regenerate PDFs using scripts in the repository root and documents folder.
+Sample policy PDFs are already included in `documents/`.
+If you replace documents, re-run indexing.
 
 Then index all PDFs:
 
@@ -216,11 +217,6 @@ Dockerized deployment is optional and is a bonus item in the assignment, not a m
 
    https://<unique-app-name>.azurewebsites.net/health
    https://<unique-app-name>.azurewebsites.net/docs
-
-### Option B: Deploy With Docker (Optional)
-
-You can use the existing Dockerfile and docker-compose setup to deploy containerized to Azure Web App for Containers.
-This is optional and useful when you want stricter runtime parity.
 
 ## 15) Design Decisions
 
