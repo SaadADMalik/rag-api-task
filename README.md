@@ -204,19 +204,63 @@ Dockerized deployment is optional and is a bonus item in the assignment, not a m
 
    az webapp config set --name <unique-app-name> --resource-group rg-ai-agent-rag --startup-file "python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
 
-6. Export Python dependencies for App Service build
-
-   poetry export -f requirements.txt --output requirements.txt --without-hashes
-
-7. Deploy source code (zip deploy)
+6. Deploy source code (zip deploy)
 
    Compress-Archive -Path app,documents,scripts,pyproject.toml,requirements.txt,README.md,.env.example -DestinationPath deploy.zip -Force
    az webapp deploy --name <unique-app-name> --resource-group rg-ai-agent-rag --src-path deploy.zip --type zip
 
-8. Verify public URL
+7. Verify public URL
 
    https://<unique-app-name>.azurewebsites.net/health
    https://<unique-app-name>.azurewebsites.net/docs
+
+### Option B: Deploy From GitHub (Recommended for continuous updates)
+
+This repository includes a GitHub Actions workflow at `.github/workflows/azure-webapp.yml`.
+Each push to `main` can trigger deployment to Azure App Service.
+
+Set these GitHub repository secrets:
+
+1. `AZURE_WEBAPP_NAME`
+2. `AZURE_WEBAPP_PUBLISH_PROFILE`
+
+Get publish profile from Azure Portal:
+
+1. Open your App Service
+2. Download publish profile
+3. Copy the XML content into GitHub secret `AZURE_WEBAPP_PUBLISH_PROFILE`
+
+### Environment Variables: What goes where
+
+GitHub Secrets (deployment only):
+
+1. `AZURE_WEBAPP_NAME`
+2. `AZURE_WEBAPP_PUBLISH_PROFILE`
+
+Azure App Service -> Configuration -> Application settings (runtime):
+
+Required:
+
+1. `GROQ_API_KEY`
+
+Recommended:
+
+1. `GROQ_MODEL=llama-3.1-8b-instant`
+2. `LOG_LEVEL=INFO`
+3. `ENABLE_CORS=true`
+4. `CORS_ORIGINS=*`
+5. `FAISS_INDEX_PATH=data/faiss_index`
+6. `RATE_LIMIT_PER_MINUTE=10`
+7. `RATE_LIMIT_ONLY_ASK=true`
+
+Optional tuning:
+
+1. `GROQ_TIMEOUT_SECONDS`
+2. `GROQ_MAX_RETRIES`
+3. `AGENT_LLM_TIMEOUT_SECONDS`
+4. `AGENT_RATE_LIMIT_COOLDOWN_SECONDS`
+
+Never commit `GROQ_API_KEY` to source control.
 
 ## 15) Design Decisions
 
