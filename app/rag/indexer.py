@@ -5,9 +5,20 @@ import shutil
 from pathlib import Path
 from typing import Any, Dict, List
 
-from langchain_core.documents import Document
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.vectorstores import FAISS
+try:
+    from langchain_core.documents import Document
+except ImportError:  # pragma: no cover - compatibility fallback
+    from langchain.schema import Document
+
+try:
+    from langchain_huggingface import HuggingFaceEmbeddings
+except ImportError:  # pragma: no cover - compatibility fallback
+    from langchain_community.embeddings import HuggingFaceEmbeddings
+
+try:
+    from langchain_community.vectorstores import FAISS
+except ImportError:  # pragma: no cover - compatibility fallback
+    from langchain.vectorstores import FAISS
 
 from app.config import settings
 
@@ -20,12 +31,18 @@ class FaissIndexer:
     def __init__(self):
         """Initialize FAISS index components."""
         self.index_path = Path(settings.FAISS_INDEX_PATH)
-        self.embeddings = HuggingFaceEmbeddings(
-            model_name=settings.EMBEDDING_MODEL_NAME,
-        )
+        self.embeddings = None
         self.vectorstore = None
 
         logger.info("FaissIndexer initialized")
+
+    def _get_embeddings(self):
+        """Lazily initialize embedding model to reduce startup fragility."""
+        if self.embeddings is None:
+            self.embeddings = HuggingFaceEmbeddings(
+                model_name=settings.EMBEDDING_MODEL_NAME,
+            )
+        return self.embeddings
 
     def create_index(self) -> None:
         """Create local FAISS index directory if needed."""
@@ -47,22 +64,35 @@ class FaissIndexer:
 
         try:
             faiss_docs = []
+            seen_ids = set()
             for doc in documents:
+                doc_id = str(doc.get('id', '')).strip()
+                content = str(doc.get('content', '')).strip()
+                if not doc_id or not content:
+                    continue
+                if doc_id in seen_ids:
+                    continue
+                seen_ids.add(doc_id)
+
                 metadata = dict(doc.get('metadata', {}))
-                metadata['id'] = doc['id']
+                metadata['id'] = doc_id
                 faiss_docs.append(
-                    Document(page_content=doc['content'], metadata=metadata)
+                    Document(page_content=content, metadata=metadata)
                 )
+
+            if not faiss_docs:
+                logger.warning("No valid documents found after validation")
+                return
 
             existing = self._load_vectorstore()
             if existing:
                 existing.add_documents(faiss_docs)
                 self.vectorstore = existing
             else:
-                self.vectorstore = FAISS.from_documents(faiss_docs, self.embeddings)
+                self.vectorstore = FAISS.from_documents(faiss_docs, self._get_embeddings())
 
             self.vectorstore.save_local(str(self.index_path))
-            logger.info("All documents uploaded successfully to FAISS")
+            logger.info("All documents uploaded successfully to FAISS [valid=%s]", len(faiss_docs))
 
         except Exception as e:
             logger.error(f"Error uploading documents: {str(e)}")
@@ -107,7 +137,7 @@ class FaissIndexer:
 
         self.vectorstore = FAISS.load_local(
             str(self.index_path),
-            self.embeddings,
+            self._get_embeddings(),
             allow_dangerous_deserialization=True,
         )
         return self.vectorstore

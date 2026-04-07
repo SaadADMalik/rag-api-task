@@ -3,8 +3,8 @@
 from typing import Dict, Any, List
 import re
 import logging
-from langchain.tools import Tool
-from langchain.pydantic_v1 import BaseModel, Field
+from langchain_core.tools import Tool
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 

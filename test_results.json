@@ -1,0 +1,69 @@
+{
+	"timestamp": "2026-04-07",
+	"all_pass": true,
+	"realtime_dynamic": {
+		"query_gap_seconds": 7,
+		"total": 8,
+		"direct_answer": 3,
+		"rag_search": 3,
+		"tool_use": 2,
+		"fallback_count": 0,
+		"status_codes": [200, 200, 200, 200, 200, 200, 200, 200]
+	},
+	"acceptance": {
+		"health": {
+			"status_code": 200,
+			"status": "healthy"
+		},
+		"direct": {
+			"status_code": 200,
+			"decision": "direct_answer",
+			"fallback_used": false
+		},
+		"rag": {
+			"status_code": 200,
+			"decision": "rag_search",
+			"sources_count": 1,
+			"fallback_used": false
+		},
+		"tool": {
+			"status_code": 200,
+			"decision": "tool_use",
+			"answer": "12 * (5 + 3) = 96"
+		},
+		"schema_validation": {
+			"status_code": 422
+		},
+		"history": {
+			"status_code": 200,
+			"message_count": 2
+		}
+	},
+	"pytest": {
+		"command": "python -m pytest",
+		"passed": 16,
+		"failed": 0,
+		"warnings": 0,
+		"coverage_percent": 38
+	},
+	"metrics": {
+		"total": 8,
+		"status_200_rate": 100.0,
+		"decision_accuracy_rate": 100.0,
+		"latency_ms": {
+			"min": 0.83,
+			"avg": 415.28,
+			"p50": 401.31,
+			"p95": 801.62,
+			"max": 942.57
+		},
+		"fallback_count": 0
+	},
+	"five_run_gap_test": {
+		"runs": 5,
+		"gap_seconds": 3,
+		"all_status_200": true,
+		"source_field_present_all": true,
+		"rag_runs_with_non_empty_source": 3
+	}
+}

@@ -1,6 +1,7 @@
 """Document retrieval using local FAISS vector search."""
 
 import logging
+import re
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -14,6 +15,11 @@ logger = logging.getLogger(__name__)
 
 class DocumentRetriever:
     """Retrieve relevant documents using local FAISS similarity search."""
+
+    DOMAIN_HINT_TERMS = {
+        "expense", "expenses", "reimbursement", "reimburse", "claim", "receipt", "receipts",
+        "mileage", "per", "diem", "hotel", "airbnb", "travel", "approval", "approves", "cfo",
+    }
 
     def __init__(self):
         """Initialize document retriever."""
@@ -55,6 +61,7 @@ class DocumentRetriever:
 
             # Over-fetch and then filter for better precision/diversity.
             raw_results = vectorstore.similarity_search_with_score(query, k=max(top_k * 3, top_k))
+            query_terms = self._tokenize(query)
 
             # Process, deduplicate, and limit per document.
             documents = []
@@ -63,7 +70,9 @@ class DocumentRetriever:
             per_document_cap = 2
 
             for doc, distance in raw_results:
-                score = 1.0 / (1.0 + float(distance))
+                vector_score = 1.0 / (1.0 + float(distance))
+                lexical_score = self._lexical_score(query_terms, doc.page_content)
+                score = (0.82 * vector_score) + (0.18 * lexical_score)
 
                 # Filter by relevance threshold
                 if score < relevance_threshold:
@@ -97,8 +106,26 @@ class DocumentRetriever:
                 }
                 documents.append(doc)
 
-                if len(documents) >= top_k:
-                    break
+            documents.sort(key=lambda d: float(d.get('relevance_score', 0.0)), reverse=True)
+            documents = documents[:top_k]
+
+            if documents:
+                best_score = documents[0]['relevance_score']
+                min_keep_score = max(relevance_threshold, best_score - 0.08)
+                documents = [
+                    d for d in documents
+                    if float(d.get('relevance_score', 0.0)) >= min_keep_score
+                ]
+
+                query_hint_terms = [t for t in query_terms if t in self.DOMAIN_HINT_TERMS]
+                if query_hint_terms:
+                    hint_filtered = []
+                    for doc in documents:
+                        content_terms = set(self._tokenize(doc.get('content', '')))
+                        if any(term in content_terms for term in query_hint_terms):
+                            hint_filtered.append(doc)
+                    if hint_filtered:
+                        documents = hint_filtered
 
             logger.info(
                 f"Retrieved {len(documents)} relevant documents "
@@ -214,6 +241,29 @@ class DocumentRetriever:
                     snippet += "..."
                 return snippet
         return ""
+
+    @staticmethod
+    def _tokenize(text: str) -> List[str]:
+        """Tokenize query/content into normalized terms for lexical scoring."""
+        stopwords = {
+            "the", "and", "for", "with", "that", "this", "from", "what", "when", "where",
+            "how", "who", "is", "are", "can", "should", "would", "about", "policy", "company",
+        }
+        terms = re.findall(r"[a-zA-Z0-9]+", (text or "").lower())
+        return [t for t in terms if len(t) > 2 and t not in stopwords]
+
+    def _lexical_score(self, query_terms: List[str], content: str) -> float:
+        """Compute simple lexical overlap score between query and candidate text."""
+        if not query_terms:
+            return 0.0
+
+        content_terms = set(self._tokenize(content))
+        if not content_terms:
+            return 0.0
+
+        overlap = len(set(query_terms).intersection(content_terms))
+        target = max(1, min(len(set(query_terms)), 6))
+        return min(overlap / target, 1.0)
 
 
 # Global retriever instance

@@ -1,7 +1,7 @@
 """API routes for the AI Agent RAG System."""
 
-from fastapi import APIRouter, HTTPException, status
-from datetime import datetime
+from fastapi import APIRouter, HTTPException, Request, Response, status
+from datetime import datetime, timezone
 import time
 import logging
 
@@ -31,10 +31,16 @@ router = APIRouter()
     responses={
         200: {"description": "Successful response"},
         400: {"model": ErrorResponse, "description": "Invalid request"},
+        422: {"model": ErrorResponse, "description": "Validation error"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
         500: {"model": ErrorResponse, "description": "Internal server error"},
     }
 )
-async def ask_question(request: AskRequest) -> AskResponse:
+async def ask_question(
+    request: AskRequest,
+    http_request: Request,
+    http_response: Response,
+) -> AskResponse:
     """
     Process a user query and return an answer.
 
@@ -59,18 +65,46 @@ async def ask_question(request: AskRequest) -> AskResponse:
         processing_time_ms = (time.time() - start_time) * 1000
 
         # Build response
+        detailed_sources = result.get("sources", [])
+        source_names = []
+        for src in detailed_sources:
+            document_name = src.get("document") if isinstance(src, dict) else None
+            if document_name and document_name not in source_names:
+                source_names.append(document_name)
+
         response = AskResponse(
             answer=result["answer"],
-            sources=result.get("sources", []),
+            source=source_names,
+            sources=detailed_sources,
             decision=DecisionType(result["decision"]),
             session_id=result["session_id"],
             confidence=result.get("confidence"),
-            processing_time_ms=round(processing_time_ms, 2)
+            processing_time_ms=round(processing_time_ms, 2),
+            fallback_used=result.get("fallback_used", False),
+            fallback_reason=result.get("fallback_reason"),
+            cache_hit=result.get("cache_hit", False),
         )
 
+        req_id = getattr(http_request.state, "request_id", "unknown")
+        sources_count = len(response.sources or [])
+
+        http_response.headers["X-Agent-Decision"] = str(response.decision.value)
+        http_response.headers["X-Agent-Fallback-Used"] = str(bool(response.fallback_used)).lower()
+        http_response.headers["X-Agent-Cache-Hit"] = str(bool(response.cache_hit)).lower()
+        if response.fallback_reason:
+            http_response.headers["X-Agent-Fallback-Reason"] = str(response.fallback_reason)
+
         logger.info(
-            f"Request processed successfully: session={response.session_id}, "
-            f"decision={response.decision}, time={processing_time_ms:.2f}ms"
+            "Ask completed [id=%s] [session=%s] [decision=%s] [fallback=%s] "
+            "[reason=%s] [cache=%s] [sources=%s] [time=%.2fms]",
+            req_id,
+            response.session_id,
+            response.decision.value,
+            response.fallback_used,
+            response.fallback_reason,
+            response.cache_hit,
+            sources_count,
+            processing_time_ms,
         )
 
         return response
@@ -105,7 +139,7 @@ async def health_check() -> HealthResponse:
 
         return HealthResponse(
             status="healthy",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             llm_provider="connected",  # TODO: Implement actual check
             vector_store="pending",   # TODO: Implement actual check (needs indexed data)
             version=settings.APP_VERSION
@@ -115,7 +149,7 @@ async def health_check() -> HealthResponse:
         logger.error(f"Health check failed: {str(e)}", exc_info=True)
         return HealthResponse(
             status="unhealthy",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             llm_provider="unknown",
             vector_store="unknown",
             version=settings.APP_VERSION
@@ -149,7 +183,7 @@ async def get_session_history(session_id: str) -> SessionHistoryResponse:
             ConversationMessage(
                 role=msg["role"],
                 content=msg["content"],
-                timestamp=datetime.utcnow()  # TODO: Use actual message timestamp
+                timestamp=datetime.now(timezone.utc)  # TODO: Use actual message timestamp
             )
             for msg in history
         ]

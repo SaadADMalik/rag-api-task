@@ -2,6 +2,7 @@
 
 import logging
 from pathlib import Path
+import shutil
 import sys
 
 # Add project root to path
@@ -14,6 +15,36 @@ from app.config import setup_logging, settings
 # Setup logging
 setup_logging(settings.LOG_LEVEL)
 logger = logging.getLogger(__name__)
+
+
+def _backup_existing_index(index_path: Path) -> Path:
+    """Backup existing index directory before rebuild."""
+    backup_path = index_path.parent / f"{index_path.name}.backup"
+    if backup_path.exists():
+        shutil.rmtree(backup_path)
+
+    if index_path.exists():
+        shutil.copytree(index_path, backup_path)
+        logger.info(f"Created index backup at: {backup_path}")
+
+    return backup_path
+
+
+def _restore_index_backup(index_path: Path, backup_path: Path) -> None:
+    """Restore index from backup if rebuild fails."""
+    if not backup_path.exists():
+        return
+
+    if index_path.exists():
+        shutil.rmtree(index_path)
+    shutil.copytree(backup_path, index_path)
+    logger.warning(f"Restored index from backup: {backup_path}")
+
+
+def _cleanup_backup(backup_path: Path) -> None:
+    """Delete backup directory after successful rebuild."""
+    if backup_path.exists():
+        shutil.rmtree(backup_path)
 
 
 def main():
@@ -29,7 +60,11 @@ def main():
         logger.error(f"Documents directory not found: {documents_dir}")
         return 1
 
+    backup_path = None
+
     try:
+        backup_path = _backup_existing_index(Path(settings.FAISS_INDEX_PATH))
+
         # Step 1: Reset existing index for clean rebuild
         logger.info("\nStep 1: Resetting existing FAISS index (if any)...")
         indexer.delete_index()
@@ -64,9 +99,17 @@ def main():
         logger.info("✓ Indexing completed successfully!")
         logger.info("=" * 60)
 
+        _cleanup_backup(backup_path)
+
         return 0
 
     except Exception as e:
+        try:
+            if backup_path is not None:
+                _restore_index_backup(Path(settings.FAISS_INDEX_PATH), backup_path)
+        except Exception as restore_error:
+            logger.error(f"Backup restore failed: {str(restore_error)}")
+
         logger.error(f"\n✗ Indexing failed: {str(e)}", exc_info=True)
         return 1
 
