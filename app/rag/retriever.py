@@ -24,12 +24,18 @@ class DocumentRetriever:
     def __init__(self):
         """Initialize document retriever."""
         self.index_path = Path(settings.FAISS_INDEX_PATH)
-        self.embeddings = HuggingFaceEmbeddings(
-            model_name=settings.EMBEDDING_MODEL_NAME,
-        )
+        self.embeddings = None
         self.vectorstore = None
 
         logger.info("DocumentRetriever initialized")
+
+    def _get_embeddings(self):
+        """Lazily initialize embeddings to keep app startup lightweight."""
+        if self.embeddings is None:
+            self.embeddings = HuggingFaceEmbeddings(
+                model_name=settings.EMBEDDING_MODEL_NAME,
+            )
+        return self.embeddings
 
     def retrieve(
         self,
@@ -150,7 +156,7 @@ class DocumentRetriever:
 
         self.vectorstore = FAISS.load_local(
             str(self.index_path),
-            self.embeddings,
+            self._get_embeddings(),
             allow_dangerous_deserialization=True,
         )
         return self.vectorstore
