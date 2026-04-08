@@ -135,15 +135,7 @@ Returns service status and dependency state summary.
 - DELETE /sessions/{session_id}
 - GET /sessions/stats
 
-## 10) Testing
 
-Run focused tests:
-
-& "d:/Whatsapp analyzer/.venv/Scripts/python.exe" -m pytest -q tests\test_router.py tests\test_memory.py tests\test_core_tools.py tests\test_retriever.py
-
-Run all tests:
-
-& "d:/Whatsapp analyzer/.venv/Scripts/python.exe" -m pytest
 
 ## 11) Operational Notes
 
